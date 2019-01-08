@@ -20,7 +20,7 @@ export function getPasteText(e) {
 }
 
 // 获取粘贴的html
-export function getPasteHtml(e, filterStyle, ignoreImg) {
+export function getPasteHtml(e, filterStyle, ignoreImg, editor) {
     const clipboardData = e.clipboardData || (e.originalEvent && e.originalEvent.clipboardData)
     let pasteText, pasteHtml
     if (clipboardData == null) {
@@ -37,21 +37,35 @@ export function getPasteHtml(e, filterStyle, ignoreImg) {
     }
 
     // 过滤word中状态过来的无用字符
-    const docSplitHtml = pasteHtml.split('</html>')
-    if (docSplitHtml.length === 2) {
-        pasteHtml = docSplitHtml[0]
-    }
+    // const docSplitHtml = pasteHtml.split('</html>')
+    // if (docSplitHtml.length === 2) {
+    //     pasteHtml = docSplitHtml[0]
+    // }
 
-    // 过滤无用标签
-    pasteHtml = pasteHtml.replace(/<(meta|script|link).+?>/igm, '')
-    // 去掉注释
-    pasteHtml = pasteHtml.replace(/<!--.*?-->/mg, '')
-    // 过滤 data-xxx 属性
-    pasteHtml = pasteHtml.replace(/\s?data-.+?=('|").+?('|")/igm, '')
+    const isWord = isWordInput(pasteHtml)
+    if (isWord) {
+        pasteHtml = clearWordRedundanceTags(pasteHtml)
+    } else {
+        // 过滤无用标签
+        pasteHtml = pasteHtml.replace(/<(meta|script|link).+?>/igm, '')
+        // 去掉注释
+        pasteHtml = pasteHtml.replace(/<!--.*?-->/mg, '')
+        // 过滤 data-xxx 属性
+        pasteHtml = pasteHtml.replace(/\s?data-.+?=('|").+?('|")/igm, '')
+    }
 
     if (ignoreImg) {
         // 忽略图片
         pasteHtml = pasteHtml.replace(/<img.+?>/igm, '')
+    } else {
+        // 检测如果是从word中复制的是否存在图片
+        const mat = pasteHtml.match(/<img width=\d+? height=\d+?[\s\S]+?src="(\S+?)"/g)
+        if(mat !== null) {
+            let imgs = extractImageDataFromRtf(clipboardData.getData('text/rtf'))
+            imgs.forEach((item, index) => {
+                editor.uploadImg.uploadImg([dataURItoFile(item)], uploadWordImgDone(mat[index]))
+            })
+        }
     }
 
     if (filterStyle) {
@@ -88,4 +102,101 @@ export function getPasteImgs(e) {
     })
 
     return result
+}
+
+/**
+ * 从rtf数据中取出图片信息
+ */
+function extractImageDataFromRtf(rtfData) {
+    if (!rtfData) {
+        return []
+    }
+
+    const regexPictureHeader = /{\\pict[\s\S]+?\\bliptag-?\d+(\\blipupi-?\d+)?({\\\*\\blipuid\s?[\da-fA-F]+)?[\s}]*?/
+    const regexPicture = new RegExp('(?:(' + regexPictureHeader.source + '))([\\da-fA-F\\s]+)\\}', 'g')
+    const images = rtfData.match(regexPicture)
+    const result = []
+
+    if (images) {
+        for (const image of images) {
+            let imageType = false
+
+            if (image.includes('\\pngblip')) {
+                imageType = 'image/png'
+            } else if (image.includes('\\jpegblip')) {
+                imageType = 'image/jpeg'
+            }
+
+            if (imageType) {
+                result.push({
+                    hex: image.replace(regexPictureHeader, '').replace(/[^\da-fA-F]/g, ''),
+                    type: imageType
+                })
+            }
+        }
+    }
+
+    return result
+}
+
+/**
+ * 将图片hex转换为base64
+ */
+function _convertHexToBase64(hexString) {
+    return btoa(hexString.match(/\w{2}/g).map(char => {
+        return String.fromCharCode(parseInt(char, 16))
+    }).join(''))
+}
+
+const typeMap = {
+    'image/png': '.png',
+    'image/jpeg': '.jpg'
+}
+
+/**
+ * 将图片hex对象转换为File对象
+ */
+function dataURItoFile(img, fileName) {
+    var byteString = atob(_convertHexToBase64(img.hex))
+    var ab = new ArrayBuffer(byteString.length)
+    var ia = new Uint8Array(ab)
+    for (var i = 0; i < byteString.length; i++) {
+        ia[i] = byteString.charCodeAt(i)
+    }
+    return new File([ia], `image${typeMap[img.type]}`, {type: img.type, lastModified: Date.now()})
+}
+
+/**
+ * word中图片上传完成以后，替换原有图片链接
+ * @param {String} originalImg 原正则匹配到的图片标签
+ */
+function uploadWordImgDone (originalImg) {
+    return (insertImg, result, editor) => {
+        let url = result.data.url
+        let imgsrc = originalImg.match(/src="(\S+)"/)
+        if(imgsrc !== null) {
+            let html = editor.txt.html()
+            html = html.split(imgsrc[1]).join(url)
+            editor.txt.html(html)
+        }
+    }
+}
+/**
+ * 检查是否是从word中复制的
+ */
+function isWordInput( html ) {
+	return !!( html && ( html.match( /<meta\s*name="?generator"?\s*content="?microsoft\s*word\s*\d+"?\/?>/gi ) ||
+		html.match( /xmlns:o="urn:schemas-microsoft-com/gi ) ) );
+}
+
+/**
+ * 删除word中的无用标签
+ */
+function clearWordRedundanceTags (html) {
+    // 删除注释
+    html = html.replace(/<!--[\s\S]*?-->/mg, '')
+    // html = html.replace(/<head>[\s\S]*?<\/head>/mg, '')
+    // html = html.replace(/<[html|body][\s\S]*?>/mg, '')
+    // html = html.replace(/<\/[html|body]>/mg, '')
+    return html
 }

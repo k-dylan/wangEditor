@@ -77,7 +77,7 @@ UploadImg.prototype = {
     },
 
     // 上传图片
-    uploadImg: function (files) {
+    uploadImg: function (files, success) {
         if (!files || !files.length) {
             return
         }
@@ -254,7 +254,9 @@ UploadImg.prototype = {
                         // 数据错误
                         this._alert('上传图片失败', '上传图片返回结果错误，返回结果 errno=' + result.errno)
                     } else {
-                        if (hooks.customInsert && typeof hooks.customInsert === 'function') {
+                        if (success && typeof success === 'function') {
+                            success(this.insertLinkImg.bind(this), result, editor)
+                        } else if (hooks.customInsert && typeof hooks.customInsert === 'function') {
                             // 使用者自定义插入方法
                             hooks.customInsert(this.insertLinkImg.bind(this), result, editor)
                         } else {

@@ -370,7 +370,7 @@ Text.prototype = {
             }
 
             // 获取粘贴的文字
-            let pasteHtml = getPasteHtml(e, pasteFilterStyle, ignoreImg)
+            let pasteHtml = getPasteHtml(e, pasteFilterStyle, ignoreImg, editor)
             let pasteText = getPasteText(e)
             pasteText = pasteText.replace(/\n/gm, '<br>')
 

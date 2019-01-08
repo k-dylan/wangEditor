@@ -23,10 +23,8 @@ function Editor(toolbarSelector, textSelector) {
     }
     // id，用以区分单个页面不同的编辑器对象
     this.id = 'wangEditor-' + editorId++
-
     this.toolbarSelector = toolbarSelector
     this.textSelector = textSelector
-
     // 自定义配置
     this.customConfig = {}
 }
